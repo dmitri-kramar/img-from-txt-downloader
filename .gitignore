@@ -1,6 +1,7 @@
 # IntelliJ IDEA project files
 .idea/
 *.iml
+test.txt
 
 # Build output
 out/
