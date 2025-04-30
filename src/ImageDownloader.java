@@ -22,13 +22,13 @@ public class ImageDownloader {
      * Runs the main application workflow: validates directory,
      * processes text files, downloads images, and prints a summary.
      *
-     * @param currentDirectory the directory to scan for text files
+     * @param directory the directory to scan for text files
      * @throws IOException if an I/O error occurs
      */
-    private static void run(Path currentDirectory) throws IOException {
-        validateDirectory(currentDirectory);
-        List<File> files = getFiles(currentDirectory);
-        validateFiles(files, currentDirectory);
+    private static void run(Path directory) throws IOException {
+        validateDirectory(directory);
+        List<File> files = getFiles(directory);
+        validateFiles(files, directory);
 
         int downloadedImages = 0;
         for (File file : files) {
@@ -51,6 +51,17 @@ public class ImageDownloader {
     }
 
     /**
+     * Finds eligible text files in the given directory.
+     *
+     * @param directory the directory to search
+     * @return a list of eligible files, or an empty list if none found
+     */
+    private static List<File> getFiles(Path directory) {
+        File[] files = directory.toFile().listFiles((dir, name) -> FILE_NAME.matcher(name).matches());
+        return files == null ? List.of() : Arrays.asList(files);
+    }
+
+    /**
      * Checks if the list of files is empty and exits the program if so.
      *
      * @param files the list of text files
@@ -64,17 +75,6 @@ public class ImageDownloader {
     }
 
     /**
-     * Finds eligible text files in the given directory.
-     *
-     * @param path the directory to search
-     * @return a list of eligible files, or an empty list if none found
-     */
-    private static List<File> getFiles(Path path) {
-        File[] files = path.toFile().listFiles((dir, name) -> FILE_NAME.matcher(name).matches());
-        return files == null ? List.of() : Arrays.asList(files);
-    }
-
-    /**
      * Extracts image links from a text file and downloads them into a folder
      * created next to the file, named after the file (without extension).
      *
@@ -83,7 +83,7 @@ public class ImageDownloader {
      * @throws IOException if an I/O error occurs while reading the file
      */
     private static int downloadImagesFromFile(File file) throws IOException {
-        List<URI> uris = extractURIs(file);
+        List<URI> uris = parseURIs(file);
         if (uris.isEmpty()) return 0;
 
         String baseName = file.getName().replaceFirst("\\.[^.]+$", "");
@@ -103,13 +103,14 @@ public class ImageDownloader {
     }
 
     /**
-     * Extracts image URIs from a given text file using a regex pattern.
+     * Parses valid image URIs from a given text file using a regex pattern.
+     * Invalid or malformed URIs are skipped.
      *
      * @param file the text file to scan
-     * @return a list of extracted image URIs
+     * @return a list of successfully parsed image URIs
      * @throws IOException if an I/O error occurs while reading the file
      */
-    private static List<URI> extractURIs(File file) throws IOException {
+    private static List<URI> parseURIs(File file) throws IOException {
         List<URI> uris = new ArrayList<>();
 
         try (BufferedReader reader = Files.newBufferedReader(file.toPath())) {
@@ -117,7 +118,7 @@ public class ImageDownloader {
             while ((line = reader.readLine()) != null) {
                 Matcher matcher = IMAGE_LINK.matcher(line);
                 while (matcher.find()) {
-                    URI uri = validateURI(matcher.group());
+                    URI uri = parseUriOrNull(matcher.group());
                     if (uri != null) uris.add(uri);
                 }
             }
@@ -133,7 +134,7 @@ public class ImageDownloader {
      * @param rawUri the raw string to validate and convert
      * @return a URI if valid, or null if invalid
      */
-    private static URI validateURI(String rawUri) {
+    private static URI parseUriOrNull(String rawUri) {
         try {
             return URI.create(rawUri);
         } catch (IllegalArgumentException e) {
@@ -167,7 +168,6 @@ public class ImageDownloader {
             return true;
         }
     }
-
 
     /**
      * Prints a summary of the number of processed files and downloaded images.
