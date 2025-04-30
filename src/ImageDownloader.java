@@ -16,7 +16,7 @@ public class ImageDownloader {
     private static final Pattern FILE_NAME = Pattern
             .compile(".*\\.(txt|csv|log|rtf)", Pattern.CASE_INSENSITIVE);
     private static final Pattern IMAGE_LINK = Pattern
-            .compile("https?://\\S+?\\.(jpg|jpeg|png|gif|webp|bmp)", Pattern.CASE_INSENSITIVE);
+            .compile("https?://[^\\s\"'<>]+?\\.(jpg|jpeg|png|gif|webp|bmp)", Pattern.CASE_INSENSITIVE);
 
     /**
      * Runs the main application workflow: validates directory,
@@ -75,7 +75,8 @@ public class ImageDownloader {
     }
 
     /**
-     * Processes a text file: extracts image URIs and downloads the images.
+     * Extracts image links from a text file and downloads them into a folder
+     * created next to the file, named after the file (without extension).
      *
      * @param file the text file to process
      * @return the number of successfully downloaded images
@@ -86,15 +87,15 @@ public class ImageDownloader {
         if (uris.isEmpty()) return 0;
 
         String baseName = file.getName().replaceFirst("\\.[^.]+$", "");
-        Path targetPath = Files.createDirectories(Paths.get(baseName));
+        Path targetPath = Files.createDirectories(
+                file.toPath().toAbsolutePath().getParent().resolve(baseName));
 
         int successfulDownloads = 0;
         for (URI uri : uris) {
             try {
-                downloadImage(uri, targetPath);
-                successfulDownloads++;
+                if (downloadImage(uri, targetPath)) successfulDownloads++;
             } catch (IOException e) {
-                System.err.println("Failed to download " + uri);
+                System.err.println("Failed to download: " + uri);
             }
         }
 
@@ -116,7 +117,8 @@ public class ImageDownloader {
             while ((line = reader.readLine()) != null) {
                 Matcher matcher = IMAGE_LINK.matcher(line);
                 while (matcher.find()) {
-                    uris.add(URI.create(matcher.group()));
+                    URI uri = validateURI(matcher.group());
+                    if (uri != null) uris.add(uri);
                 }
             }
         }
@@ -125,20 +127,47 @@ public class ImageDownloader {
     }
 
     /**
-     * Downloads an image from a given URI into the specified target directory.
+     * Validates and parses the given string into a URI.
+     * Returns null if the string is not a valid URI.
+     *
+     * @param rawUri the raw string to validate and convert
+     * @return a URI if valid, or null if invalid
+     */
+    private static URI validateURI(String rawUri) {
+        try {
+            return URI.create(rawUri);
+        } catch (IllegalArgumentException e) {
+            System.err.printf("Invalid URL skipped: %s%n", rawUri);
+            return null;
+        }
+    }
+
+    /**
+     * Attempts to download an image from the given URI into the specified directory.
+     * Skips download if the file already exists.
      *
      * @param uri the URI of the image
      * @param targetPath the directory to save the image to
-     * @throws IOException if an I/O error occurs during downloading or saving
+     * @return true if the image was downloaded; false if it was skipped
+     * @throws IOException if an error occurs during downloading or saving
      */
-    private static void downloadImage(URI uri, Path targetPath) throws IOException {
+    private static boolean downloadImage(URI uri, Path targetPath) throws IOException {
+        String fileName = Paths.get(uri.getPath()).getFileName().toString();
+        Path relativePath = Paths.get(targetPath.getFileName().toString(), fileName);
+        Path imagePath = targetPath.resolve(fileName);
+
+        if (Files.exists(imagePath)) {
+            System.out.println("Skipped (already exists): " + relativePath);
+            return false;
+        }
+
         try (InputStream in = uri.toURL().openStream()) {
-            String fileName = Paths.get(uri.getPath()).getFileName().toString();
-            Path imagePath = targetPath.resolve(fileName);
             Files.copy(in, imagePath, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println(imagePath);
+            System.out.println("Downloaded: " + relativePath);
+            return true;
         }
     }
+
 
     /**
      * Prints a summary of the number of processed files and downloaded images.

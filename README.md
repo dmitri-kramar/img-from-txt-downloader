@@ -69,7 +69,7 @@ Running the program will:
 - You can specify a directory as an argument or use the current one.
 - If no eligible text files are found, the program will print a warning and exit without an error.
 - Broken or unreachable links are skipped with error messages displayed in the console.
-- Already existing files will be overwritten.
+- Already existing files will be skipped.
 
 ---
 
